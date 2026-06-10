@@ -218,7 +218,7 @@ fn format(
     _format(db, kind, file_id, &expansion).unwrap_or(expansion)
 }
 
-#[cfg(any(test, target_arch = "wasm32", target_os = "emscripten"))]
+#[cfg(any(test, all(target_arch = "wasm32", not(target_os = "wasi")), target_os = "emscripten"))]
 fn _format(
     _db: &RootDatabase,
     _kind: SyntaxKind,
@@ -230,7 +230,7 @@ fn _format(
     Some(expansion.lines().map(|x| x.trim_end()).join("\n"))
 }
 
-#[cfg(not(any(test, target_arch = "wasm32", target_os = "emscripten")))]
+#[cfg(not(any(test, all(target_arch = "wasm32", not(target_os = "wasi")), target_os = "emscripten")))]
 fn _format(
     db: &RootDatabase,
     kind: SyntaxKind,

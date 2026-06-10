@@ -259,15 +259,88 @@ mod imp {
 #[cfg(target_arch = "wasm32")]
 mod imp {
     use std::{
-        io,
+        io::{self, Read},
         process::{ChildStderr, ChildStdout},
+        sync::mpsc,
+        thread,
     };
 
     pub(crate) fn read2(
-        _out_pipe: ChildStdout,
-        _err_pipe: ChildStderr,
-        _data: &mut dyn FnMut(bool, &mut Vec<u8>, bool),
+        mut out_pipe: ChildStdout,
+        mut err_pipe: ChildStderr,
+        data: &mut dyn FnMut(bool, &mut Vec<u8>, bool),
     ) -> io::Result<()> {
-        panic!("no processes on wasm")
+        let (tx, rx) = mpsc::channel();
+        let out_tx = tx.clone();
+        let err_tx = tx;
+
+        thread::spawn(move || {
+            let mut buf = [0; 1024];
+            loop {
+                match out_pipe.read(&mut buf) {
+                    Ok(0) => {
+                        let _ = out_tx.send((true, Ok(Vec::new()), true));
+                        break;
+                    }
+                    Ok(n) => {
+                        if out_tx.send((true, Ok(buf[..n].to_vec()), false)).is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = out_tx.send((true, Err(e), false));
+                        break;
+                    }
+                }
+            }
+        });
+
+        thread::spawn(move || {
+            let mut buf = [0; 1024];
+            loop {
+                match err_pipe.read(&mut buf) {
+                    Ok(0) => {
+                        let _ = err_tx.send((false, Ok(Vec::new()), true));
+                        break;
+                    }
+                    Ok(n) => {
+                        if err_tx.send((false, Ok(buf[..n].to_vec()), false)).is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = err_tx.send((false, Err(e), false));
+                        break;
+                    }
+                }
+            }
+        });
+
+        let mut out_done = false;
+        let mut err_done = false;
+
+        while !out_done || !err_done {
+            match rx.recv() {
+                Ok((is_out, Ok(mut bytes), is_eof)) => {
+                    if is_out {
+                        if is_eof {
+                            out_done = true;
+                        }
+                        data(true, &mut bytes, is_eof);
+                    } else {
+                        if is_eof {
+                            err_done = true;
+                        }
+                        data(false, &mut bytes, is_eof);
+                    }
+                }
+                Ok((_, Err(e), _)) => {
+                    return Err(e);
+                }
+                Err(_) => break,
+            }
+        }
+
+        Ok(())
     }
 }

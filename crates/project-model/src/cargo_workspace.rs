@@ -786,19 +786,31 @@ impl FetchMetadata {
         let res = (|| -> anyhow::Result<(_, _)> {
             let mut errored = false;
             tracing::debug!("Running `{:?}`", command.cargo_command());
-            let output =
-                spawn_with_streaming_output(command.cargo_command(), &mut |_| (), &mut |line| {
-                    errored = errored || line.starts_with("error") || line.starts_with("warning");
-                    if errored {
-                        progress("cargo metadata: ?".to_owned());
-                        return;
-                    }
-                    progress(format!("cargo metadata: {line}"));
-                })?;
-            if !output.status.success() {
-                progress(format!("cargo metadata: failed {}", output.status));
+            
+            let (output_success, output_stderr, output_stdout) = {
+                #[cfg(target_os = "wasi")]
+                {
+                    let o = toolchain::wasi_cargo::ffi::invoke_cargo(&command.cargo_command())?;
+                    (o.status_success, o.stderr, o.stdout)
+                }
+                #[cfg(not(target_os = "wasi"))]
+                {
+                    let o = spawn_with_streaming_output(command.cargo_command(), &mut |_| (), &mut |line| {
+                        errored = errored || line.starts_with("error") || line.starts_with("warning");
+                        if errored {
+                            progress("cargo metadata: ?".to_owned());
+                            return;
+                        }
+                        progress(format!("cargo metadata: {line}"));
+                    })?;
+                    (o.status.success(), o.stderr, o.stdout)
+                }
+            };
+            
+            if !output_success {
+                progress(format!("cargo metadata: failed"));
                 let error = cargo_metadata::Error::CargoMetadata {
-                    stderr: String::from_utf8(output.stderr)?,
+                    stderr: String::from_utf8(output_stderr)?,
                 }
                 .into();
                 if !no_deps {
@@ -814,7 +826,7 @@ impl FetchMetadata {
                 }
                 return Err(error);
             }
-            let stdout = from_utf8(&output.stdout)?
+            let stdout = from_utf8(&output_stdout)?
                 .lines()
                 .find(|line| line.starts_with('{'))
                 .ok_or(cargo_metadata::Error::NoJson)?;

@@ -44,7 +44,7 @@ span.workspace = true
 hir.workspace = true
 macros.workspace = true
 
-[target.'cfg(not(any(target_arch = "wasm32", target_os = "emscripten")))'.dependencies]
+[target.'cfg(not(any(all(target_arch = "wasm32", not(target_os = "wasi")), target_os = "emscripten")))'.dependencies]
 toolchain.workspace = true
 
 [dev-dependencies]

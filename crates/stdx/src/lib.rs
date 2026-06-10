@@ -292,7 +292,7 @@ pub fn defer<F: FnOnce()>(f: F) -> impl Drop {
 }
 
 /// A [`std::process::Child`] wrapper that will kill the child on drop.
-#[cfg_attr(not(target_arch = "wasm32"), repr(transparent))]
+#[cfg_attr(any(not(target_arch = "wasm32"), target_os = "wasi"), repr(transparent))]
 #[derive(Debug)]
 pub struct JodChild(pub std::process::Child);
 
@@ -322,7 +322,7 @@ impl JodChild {
     }
 
     #[must_use]
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(not(target_arch = "wasm32"), target_os = "wasi"))]
     pub fn into_inner(self) -> std::process::Child {
         // SAFETY: repr transparent, except on WASM
         unsafe { std::mem::transmute::<Self, std::process::Child>(self) }

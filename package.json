@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@oligami/browser_wasi_shim-threads": "^0.3.6"
+  }
+}

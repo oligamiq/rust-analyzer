@@ -211,16 +211,27 @@ impl fmt::Display for ProjectManifest {
 }
 
 fn utf8_stdout(cmd: &mut Command) -> anyhow::Result<String> {
-    let output = cmd.output().with_context(|| format!("{cmd:?} failed"))?;
-    if !output.status.success() {
-        match String::from_utf8(output.stderr) {
+    let (output_success, output_stderr, output_stdout) = {
+        #[cfg(target_os = "wasi")]
+        {
+            let o = toolchain::wasi_cargo::ffi::invoke_cargo(cmd)?;
+            (o.status_success, o.stderr, o.stdout)
+        }
+        #[cfg(not(target_os = "wasi"))]
+        {
+            let o = cmd.output().with_context(|| format!("{cmd:?} failed"))?;
+            (o.status.success(), o.stderr, o.stdout)
+        }
+    };
+    if !output_success {
+        match String::from_utf8(output_stderr) {
             Ok(stderr) if !stderr.is_empty() => {
-                bail!("{:?} failed, {}\nstderr:\n{}", cmd, output.status, stderr)
+                bail!("{:?} failed\nstderr:\n{}", cmd, stderr)
             }
-            _ => bail!("{:?} failed, {}", cmd, output.status),
+            _ => bail!("{:?} failed", cmd),
         }
     }
-    let stdout = String::from_utf8(output.stdout)?;
+    let stdout = String::from_utf8(output_stdout)?;
     Ok(stdout.trim().to_owned())
 }
 

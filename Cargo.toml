@@ -35,6 +35,8 @@ inherits = "release"
 debug = 2
 
 [patch.'crates-io']
+temp-dir = { path = "dummy_temp_dir" }
+parking_lot_core = { path = "dummy_parking_lot_core" }
 # rowan = { path = "../rowan" }
 
 # line-index = { path = "lib/line-index" }

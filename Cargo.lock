@@ -1703,8 +1703,6 @@ dependencies = [
 [[package]]
 name = "parking_lot_core"
 version = "0.9.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc838d2a56b5b1a6c25f55575dfc605fabb63bb2365f6c2353ef9159aa69e4a5"
 dependencies = [
  "cfg-if",
  "libc",
@@ -2777,8 +2775,6 @@ dependencies = [
 [[package]]
 name = "temp-dir"
 version = "0.1.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83176759e9416cf81ee66cb6508dbfe9c96f20b8b56265a39917551c23c70964"
 
 [[package]]
 name = "tempfile"
@@ -3032,6 +3028,8 @@ version = "0.0.0"
 dependencies = [
  "camino",
  "home",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

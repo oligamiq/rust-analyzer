@@ -29,19 +29,19 @@ pub(crate) trait JsonLinesParser<T>: Send + 'static {
 struct CommandActor<T> {
     parser: Box<dyn JsonLinesParser<T>>,
     sender: Sender<T>,
-    stdout: ChildStdout,
-    stderr: ChildStderr,
+    stdout: Box<dyn io::Read + Send + 'static>,
+    stderr: Box<dyn io::Read + Send + 'static>,
 }
 
 impl<T: Sized + Send + 'static> CommandActor<T> {
     fn new(
         parser: impl JsonLinesParser<T>,
         sender: Sender<T>,
-        stdout: ChildStdout,
-        stderr: ChildStderr,
+        stdout: impl io::Read + Send + 'static,
+        stderr: impl io::Read + Send + 'static,
     ) -> Self {
         let parser = Box::new(parser);
-        CommandActor { parser, sender, stdout, stderr }
+        CommandActor { parser, sender, stdout: Box::new(stdout), stderr: Box::new(stderr) }
     }
 }
 
@@ -78,54 +78,63 @@ impl<T: Sized + Send + 'static> CommandActor<T> {
                 false
             }
         };
-        let output = streaming_output(
-            self.stdout,
-            self.stderr,
-            &mut |line| {
-                if let Some(stdout) = &mut stdout {
-                    _ = stdout.write_all(line.as_bytes());
-                    _ = stdout.write_all(b"\n");
-                }
-                if process_line(line, &mut stdout_errors) {
-                    read_at_least_one_stdout_message = true;
-                }
-            },
-            &mut |line| {
-                if let Some(stderr) = &mut stderr {
-                    _ = stderr.write_all(line.as_bytes());
-                    _ = stderr.write_all(b"\n");
-                }
-                if process_line(line, &mut stderr_errors) {
-                    read_at_least_one_stderr_message = true;
-                }
-            },
-            &mut || {
-                if let Some(t) = self.parser.from_eof() {
-                    self.sender.send(t).unwrap();
-                }
-            },
-        );
+
+        use std::io::BufRead;
+        let mut stdout_reader = std::io::BufReader::new(self.stdout);
+        let mut stderr_reader = std::io::BufReader::new(self.stderr);
+        let mut out_line = String::new();
+        let mut err_line = String::new();
+
+        while let Ok(n) = stdout_reader.read_line(&mut out_line) {
+            if n == 0 { break; }
+            let line = out_line.trim_end();
+            if let Some(stdout) = &mut stdout {
+                _ = stdout.write_all(line.as_bytes());
+                _ = stdout.write_all(b"\n");
+            }
+            if process_line(line, &mut stdout_errors) {
+                read_at_least_one_stdout_message = true;
+            }
+            out_line.clear();
+        }
+
+        while let Ok(n) = stderr_reader.read_line(&mut err_line) {
+            if n == 0 { break; }
+            let line = err_line.trim_end();
+            if let Some(stderr) = &mut stderr {
+                _ = stderr.write_all(line.as_bytes());
+                _ = stderr.write_all(b"\n");
+            }
+            if process_line(line, &mut stderr_errors) {
+                read_at_least_one_stderr_message = true;
+            }
+            err_line.clear();
+        }
+
+        if let Some(t) = self.parser.from_eof() {
+            self.sender.send(t).unwrap();
+        }
 
         let read_at_least_one_message =
             read_at_least_one_stdout_message || read_at_least_one_stderr_message;
         let mut error = stdout_errors;
         error.push_str(&stderr_errors);
-        match output {
-            Ok(_) => Ok((read_at_least_one_message, error)),
-            Err(e) => Err(io::Error::new(e.kind(), format!("{e:?}: {error}"))),
-        }
+        
+        Ok((read_at_least_one_message, error))
     }
 }
 
 /// 'Join On Drop' wrapper for a child process.
 ///
 /// This wrapper kills the process when the wrapper is dropped.
-struct JodGroupChild(Box<dyn StdChildWrapper>);
+struct JodGroupChild(Option<Box<dyn StdChildWrapper>>);
 
 impl Drop for JodGroupChild {
     fn drop(&mut self) {
-        _ = self.0.kill();
-        _ = self.0.wait();
+        if let Some(child) = &mut self.0 {
+            _ = child.kill();
+            _ = child.wait();
+        }
     }
 }
 
@@ -158,6 +167,32 @@ impl<T: Sized + Send + 'static> CommandHandle<T> {
         sender: Sender<T>,
         out_file: Option<Utf8PathBuf>,
     ) -> anyhow::Result<Self> {
+        #[cfg(target_os = "wasi")]
+        if command.get_program() == "cargo" || command.get_program().to_string_lossy().ends_with("cargo") {
+            let program = command.get_program().into();
+            let arguments = command.get_args().map(|arg| arg.into()).collect::<Vec<OsString>>();
+            let current_dir = command.get_current_dir().map(|arg| arg.to_path_buf());
+            
+            let thread = stdx::thread::Builder::new(stdx::thread::ThreadIntent::Worker, "CommandHandle")
+                .spawn(move || {
+                    let output = toolchain::wasi_cargo::ffi::invoke_cargo(&command).unwrap();
+                    let stdout = std::io::Cursor::new(output.stdout);
+                    let stderr = std::io::Cursor::new(output.stderr);
+                    let mut actor = CommandActor::<T>::new(parser, sender, stdout, stderr);
+                    actor.run(out_file)
+                })
+                .expect("failed to spawn thread");
+
+            return Ok(CommandHandle {
+                program,
+                arguments,
+                current_dir,
+                child: JodGroupChild(None),
+                thread,
+                _phantom: PhantomData,
+            });
+        }
+
         command.stdout(Stdio::piped()).stderr(Stdio::piped()).stdin(Stdio::null());
 
         let program = command.get_program().into();
@@ -171,11 +206,11 @@ impl<T: Sized + Send + 'static> CommandHandle<T> {
         child.wrap(process_wrap::std::JobObject);
         let mut child = child
             .spawn()
-            .map(JodGroupChild)
+            .map(|c| JodGroupChild(Some(c)))
             .with_context(|| "Failed to spawn command: {child:?}")?;
 
-        let stdout = child.0.stdout().take().unwrap();
-        let stderr = child.0.stderr().take().unwrap();
+        let stdout = child.0.as_mut().unwrap().stdout().take().unwrap();
+        let stderr = child.0.as_mut().unwrap().stderr().take().unwrap();
 
         let actor = CommandActor::<T>::new(parser, sender, stdout, stderr);
         let thread =
@@ -186,37 +221,47 @@ impl<T: Sized + Send + 'static> CommandHandle<T> {
     }
 
     pub(crate) fn cancel(mut self) {
-        let _ = self.child.0.kill();
-        let _ = self.child.0.wait();
+        if let Some(child) = &mut self.child.0 {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 
     pub(crate) fn join(mut self) -> io::Result<()> {
-        let exit_status = self.child.0.wait()?;
+        let exit_success = if let Some(child) = &mut self.child.0 {
+            child.wait()?.success()
+        } else {
+            true
+        };
         let (read_at_least_one_message, error) = self.thread.join()?;
-        if read_at_least_one_message || exit_status.success() {
+        if read_at_least_one_message || exit_success {
             Ok(())
         } else {
             Err(io::Error::other(format!(
-                "Cargo watcher failed, the command produced no valid metadata (exit code: {exit_status:?}):\n{error}"
+                "Cargo watcher failed, the command produced no valid metadata:\n{error}"
             )))
         }
     }
 
     pub(crate) fn has_exited(&mut self) -> bool {
-        match self.child.0.try_wait() {
-            Ok(Some(_exit_code)) => {
-                // We have an exit code.
-                true
+        if let Some(child) = &mut self.child.0 {
+            match child.try_wait() {
+                Ok(Some(_exit_code)) => {
+                    // We have an exit code.
+                    true
+                }
+                Ok(None) => {
+                    // Hasn't exited yet.
+                    false
+                }
+                Err(_) => {
+                    // Couldn't get an exit code. Assume that we've
+                    // exited.
+                    true
+                }
             }
-            Ok(None) => {
-                // Hasn't exited yet.
-                false
-            }
-            Err(_) => {
-                // Couldn't get an exit code. Assume that we've
-                // exited.
-                true
-            }
+        } else {
+            true
         }
     }
 }

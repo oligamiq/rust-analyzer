@@ -10,6 +10,8 @@ use std::{
 
 use camino::{Utf8Path, Utf8PathBuf};
 
+pub mod wasi_cargo;
+
 #[derive(Copy, Clone)]
 pub enum Tool {
     Cargo,
@@ -119,7 +121,15 @@ fn get_cargo_home() -> Option<Utf8PathBuf> {
         return Utf8PathBuf::try_from(PathBuf::from(path)).ok();
     }
 
+    #[cfg(any(unix, target_os = "windows"))]
     if let Some(mut path) = home::home_dir() {
+        path.push(".cargo");
+        return Utf8PathBuf::try_from(path).ok();
+    }
+
+    #[cfg(target_os = "wasi")]
+    if let Some(path) = env::var_os("HOME") {
+        let mut path = PathBuf::from(path);
         path.push(".cargo");
         return Utf8PathBuf::try_from(path).ok();
     }
@@ -129,7 +139,15 @@ fn get_cargo_home() -> Option<Utf8PathBuf> {
 
 fn lookup_in_path(exec: &str) -> Option<Utf8PathBuf> {
     let paths = env::var_os("PATH").unwrap_or_default();
-    env::split_paths(&paths)
+    
+    #[cfg(target_os = "wasi")]
+    let split_paths = paths.to_string_lossy().split(':').map(PathBuf::from).collect::<Vec<_>>();
+    
+    #[cfg(not(target_os = "wasi"))]
+    let split_paths = env::split_paths(&paths);
+
+    split_paths
+        .into_iter()
         .map(|path| path.join(exec))
         .map(Utf8PathBuf::try_from)
         .filter_map(Result::ok)
