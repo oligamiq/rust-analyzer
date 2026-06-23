@@ -3,7 +3,7 @@ pub mod ffi {
     use std::io;
     use std::process::Command;
 
-    #[link(wasm_import_module = "env")]
+    #[link(wasm_import_module = "__wasip1_vfs-host")]
     unsafe extern "C" {
         fn host_run_cargo(
             req_ptr: *const u8,
