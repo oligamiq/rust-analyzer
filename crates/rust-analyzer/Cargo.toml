@@ -20,6 +20,9 @@ name = "rust-analyzer"
 path = "src/bin/main.rs"
 
 [dependencies]
+rmp-serde = "1.3"
+blake3 = "1.5"
+serde_bytes = "0.11"
 anyhow.workspace = true
 base64 = "0.22"
 crossbeam-channel.workspace = true
@@ -86,6 +89,9 @@ windows-sys = { version = "0.61", features = [
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 jemallocator = { version = "0.5.4", package = "tikv-jemallocator", optional = true }
 
+[build-dependencies]
+blake3 = "1.5"
+
 [dev-dependencies]
 expect-test = "1.5.1"
 xshell.workspace = true
@@ -97,6 +103,8 @@ syntax-bridge.workspace = true
 intern = { path = "../intern", features = ["prevent-gc"] }
 
 [features]
+cache-item-trees = ["ide-db/cache-item-trees"]
+cache-codec-bench = ["ide-db/cache-codec-bench"]
 jemalloc = ["jemallocator", "profile/jemalloc"]
 force-always-assert = ["stdx/force-always-assert"]
 in-rust-tree = [

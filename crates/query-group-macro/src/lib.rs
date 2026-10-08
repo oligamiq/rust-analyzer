@@ -169,6 +169,16 @@ pub(crate) fn query_group_impl(
     _args: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> Result<proc_macro::TokenStream, syn::Error> {
+    let is_persist = if _args.is_empty() {
+        false
+    } else {
+        let argument = syn::parse::<syn::Ident>(_args)?;
+        if argument != "persist" {
+            return Err(syn::Error::new(argument.span(), "expected `persist`"));
+        }
+        true
+    };
+
     let mut item_trait = syn::parse::<ItemTrait>(input)?;
 
     let supertraits = &item_trait.supertraits;
@@ -355,8 +365,14 @@ pub(crate) fn query_group_impl(
         })
         .collect::<Vec<proc_macro2::TokenStream>>();
 
+    let input_attr = if is_persist {
+        quote! { #[salsa_macros::input(persist)] }
+    } else {
+        quote! { #[salsa_macros::input] }
+    };
+
     let input_struct = quote! {
-        #[salsa_macros::input]
+        #input_attr
         pub(crate) struct #input_struct_name {
             #(#fields),*
         }
@@ -365,9 +381,15 @@ pub(crate) fn query_group_impl(
     let field_params = std::iter::repeat_n(quote! { None }, fields.len())
         .collect::<Vec<proc_macro2::TokenStream>>();
 
+    let tracked_attr = if is_persist {
+        quote! { #[salsa_macros::tracked(persist)] }
+    } else {
+        quote! { #[salsa_macros::tracked] }
+    };
+
     let create_data_method = quote! {
         #[allow(non_snake_case)]
-        #[salsa_macros::tracked]
+        #tracked_attr
         fn #create_data_ident(db: &dyn #trait_name_ident) -> #input_struct_name {
             #input_struct_name::new(db, #(#field_params),*)
         }

@@ -18,7 +18,9 @@ use std::{iter, mem, sync::atomic::AtomicUsize};
 use hir::{ChangeWithProcMacros, ProcMacrosBuilder, db::DefDatabase};
 use ide_db::{
     FxHashMap,
-    base_db::{CrateGraphBuilder, ProcMacroLoadingError, ProcMacroPaths, salsa::Durability},
+    base_db::{
+        CrateGraphBuilder, ProcMacroLoadingError, ProcMacroPaths, SourceDatabase, salsa::Durability,
+    },
 };
 use itertools::Itertools;
 use load_cargo::{ProjectFolders, load_proc_macro};
@@ -739,6 +741,11 @@ impl GlobalState {
     }
 
     fn recreate_crate_graph(&mut self, cause: String, initial_build: bool) {
+        // Materialize all VFS changes in the cold database before merging a
+        // cached baseline. The VFS IDs were reserved before workspace loading.
+        if self.semantic_cache.is_some() {
+            self.process_changes();
+        }
         info!(?cause, "Building Crate Graph");
         self.report_progress(
             "Building CrateGraph",
@@ -795,7 +802,94 @@ impl GlobalState {
             }
 
             change.set_crate_graph(crate_graph);
+            let mut merged_cache_roots = None;
+            if !self.incomplete_crate_graph
+                && self.semantic_cache.as_ref().is_some_and(|cache| {
+                    cache.can_merge(change.source_change.crate_graph.as_ref().unwrap())
+                })
+            {
+                if let Some(mut cache) = self.semantic_cache.take() {
+                    let vfs = &self.vfs.read().0;
+                    let roots = self.source_root_config.partition(vfs);
+                    let root_ids: FxHashMap<_, _> = roots
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(index, root)| root.iter().map(move |file| (file, index as u32)))
+                        .collect();
+                    let moved_roots = cache
+                        .files
+                        .iter()
+                        .filter(|(_, _, exists)| *exists)
+                        .filter(|(file, _, _)| {
+                            root_ids.get(file).copied()
+                                != Some(
+                                    cache.db.file_source_root(*file).source_root_id(&cache.db).0,
+                                )
+                        })
+                        .count();
+                    tracing::info!(
+                        moved_roots,
+                        crates = change.source_change.crate_graph.as_ref().unwrap().iter().count(),
+                        "[stdlib-cache] merging"
+                    );
+                    self.report_std_cache(format!(
+                        "[stdlib-cache] merge_prepared: moved_source_root_files={moved_roots}"
+                    ));
+                    change.set_roots(roots);
+                    for (id, _) in vfs.iter() {
+                        let text = self
+                            .analysis_host
+                            .raw_database()
+                            .file_text(id)
+                            .text(self.analysis_host.raw_database())
+                            .to_string();
+                        change.change_file(id, Some(text));
+                    }
+                    if cache.db.expand_proc_attr_macros() != self.config.expand_proc_attr_macros() {
+                        cache.db.set_expand_proc_attr_macros_with_durability(
+                            self.config.expand_proc_attr_macros(),
+                            Durability::HIGH,
+                        );
+                    }
+                    self.analysis_host.trigger_cancellation();
+                    self.cache_audit = cache.audit.take();
+                    *self.analysis_host.raw_database_mut() = cache.db;
+                    merged_cache_roots = Some(moved_roots);
+                    tracing::info!("restored standard-library Salsa cache");
+                }
+            }
             self.analysis_host.apply_change(change);
+            if let Some(moved_roots) = merged_cache_roots {
+                // Validate the restored query families synchronously before
+                // worker snapshots can traverse their persisted dependency
+                // edges. Salsa 0.26 initializes function views lazily; the
+                // optional audit must not be what makes a restored DB usable.
+                let db = self.analysis_host.raw_database();
+                let start = std::time::Instant::now();
+                for &krate in ide_db::base_db::all_crates(db).iter() {
+                    if krate.data(db).origin.is_lang() {
+                        hir::crate_def_map(db, krate);
+                        #[cfg(feature = "cache-item-trees")]
+                        db.file_item_tree(krate.root_file_id(db).into(), krate);
+                    }
+                }
+                self.report_std_cache(format!(
+                    "[stdlib-cache] merged: moved_source_root_files={moved_roots} activation_ms={}",
+                    start.elapsed().as_millis()
+                ));
+            }
+            if ide_db::base_db::all_crates(self.analysis_host.raw_database())
+                .iter()
+                .any(|krate| !krate.data(self.analysis_host.raw_database()).origin.is_lang())
+            {
+                if let Some(audit) = self.cache_audit.take() {
+                    let report = audit.finish(self.analysis_host.raw_database(), |message| {
+                        self.report_std_cache(message)
+                    });
+                    tracing::info!("{report}");
+                    self.report_std_cache(report);
+                }
+            }
 
             self.finish_loading_crate_graph();
         } else {

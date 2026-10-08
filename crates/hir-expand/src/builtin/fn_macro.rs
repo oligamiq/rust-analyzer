@@ -29,11 +29,13 @@ use crate::{
 macro_rules! register_builtin {
     ( $LAZY:ident: $(($name:ident, $kind: ident) => $expand:ident),* , $EAGER:ident: $(($e_name:ident, $e_kind: ident) => $e_expand:ident),*  ) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(serde::Serialize, serde::Deserialize)]
         pub enum $LAZY {
             $($kind),*
         }
 
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(serde::Serialize, serde::Deserialize)]
         pub enum $EAGER {
             $($e_kind),*
         }

@@ -7,7 +7,7 @@ use std::fmt;
 use intern::Symbol;
 
 /// A simple configuration value passed in from the outside.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum CfgAtom {
     /// eg. `#[cfg(test)]`
     Flag(Symbol),
@@ -48,6 +48,7 @@ impl fmt::Display for CfgAtom {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(arbitrary::Arbitrary))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum CfgExpr {
     Invalid,
     Atom(CfgAtom),

@@ -11,7 +11,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use crate::{AnchoredPath, FileId, Vfs, VfsPath};
 
 /// A set of [`VfsPath`]s identified by [`FileId`]s.
-#[derive(Default, Clone, Eq, PartialEq)]
+#[derive(Default, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FileSet {
     files: FxHashMap<VfsPath, FileId>,
     paths: IndexMap<FileId, VfsPath, FxBuildHasher>,

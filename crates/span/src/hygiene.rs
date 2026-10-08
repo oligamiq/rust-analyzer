@@ -26,7 +26,9 @@ use std::fmt;
 
 /// A syntax context describes a hierarchy tracking order of macro definitions.
 #[cfg(feature = "salsa")]
-#[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(
+    Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct SyntaxContext(
     /// # Invariant
     ///
@@ -41,7 +43,7 @@ const _: () = {
     use salsa::plumbing as zalsa_;
     use salsa::plumbing::interned as zalsa_struct_;
 
-    #[derive(Clone, Eq, Debug)]
+    #[derive(Clone, Eq, Debug, serde::Serialize, serde::Deserialize)]
     pub struct SyntaxContextData {
         outer_expn: Option<MacroCallId>,
         outer_transparency: Transparency,
@@ -108,23 +110,23 @@ const _: () = {
             salsa::plumbing::Location { file: file!(), line: line!() };
         const DEBUG_NAME: &'static str = "SyntaxContextData";
         const REVISIONS: std::num::NonZeroUsize = std::num::NonZeroUsize::MAX;
-        const PERSIST: bool = false;
+        const PERSIST: bool = true;
 
         type Fields<'a> = SyntaxContextData;
         type Struct<'a> = SyntaxContext;
 
-        fn serialize<S>(_: &Self::Fields<'_>, _: S) -> Result<S::Ok, S::Error>
+        fn serialize<S>(fields: &Self::Fields<'_>, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: zalsa_::serde::Serializer,
         {
-            unimplemented!("attempted to serialize value that set `PERSIST` to false")
+            serde::Serialize::serialize(fields, serializer)
         }
 
-        fn deserialize<'de, D>(_: D) -> Result<Self::Fields<'static>, D::Error>
+        fn deserialize<'de, D>(deserializer: D) -> Result<Self::Fields<'static>, D::Error>
         where
             D: zalsa_::serde::Deserializer<'de>,
         {
-            unimplemented!("attempted to deserialize value that cannot set `PERSIST` to false");
+            serde::Deserialize::deserialize(deserializer)
         }
     }
 
@@ -464,7 +466,9 @@ impl SyntaxContext {
 
 /// A property of a macro expansion that determines how identifiers
 /// produced by that expansion are resolved.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Debug)]
+#[derive(
+    Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Debug, serde::Serialize, serde::Deserialize,
+)]
 pub enum Transparency {
     /// Identifier produced by a transparent expansion is always resolved at call-site.
     /// Call-site spans in procedural macros, hygiene opt-out in `macro` should use this.

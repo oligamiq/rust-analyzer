@@ -47,7 +47,7 @@ pub type FxIndexMap<K, V> =
 #[macro_export]
 macro_rules! impl_intern_key {
     ($id:ident, $loc:ident) => {
-        #[salsa_macros::interned(no_lifetime, revisions = usize::MAX)]
+        #[salsa_macros::interned(no_lifetime, revisions = usize::MAX, persist)]
         #[derive(PartialOrd, Ord)]
         pub struct $id {
             #[returns(ref)]
@@ -91,7 +91,7 @@ pub const DEFAULT_FILE_TEXT_LRU_CAP: u16 = 16;
 pub const DEFAULT_PARSE_LRU_CAP: u16 = 128;
 pub const DEFAULT_BORROWCK_LRU_CAP: u16 = 2024;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Files {
     files: Arc<DashMap<vfs::FileId, FileText, BuildHasherDefault<FxHasher>>>,
     source_roots: Arc<DashMap<SourceRootId, SourceRootInput, BuildHasherDefault<FxHasher>>>,
@@ -111,7 +111,9 @@ impl Files {
     pub fn set_file_text(&self, db: &mut dyn SourceDatabase, file_id: vfs::FileId, text: &str) {
         match self.files.entry(file_id) {
             Entry::Occupied(mut occupied) => {
-                occupied.get_mut().set_text(db).to(Arc::from(text));
+                if occupied.get().text(db).as_ref() != text {
+                    occupied.get_mut().set_text(db).to(Arc::from(text));
+                }
             }
             Entry::Vacant(vacant) => {
                 let text = FileText::new(db, Arc::from(text), file_id);
@@ -129,7 +131,9 @@ impl Files {
     ) {
         match self.files.entry(file_id) {
             Entry::Occupied(mut occupied) => {
-                occupied.get_mut().set_text(db).with_durability(durability).to(Arc::from(text));
+                if occupied.get().text(db).as_ref() != text {
+                    occupied.get_mut().set_text(db).with_durability(durability).to(Arc::from(text));
+                }
             }
             Entry::Vacant(vacant) => {
                 let text =
@@ -160,7 +164,13 @@ impl Files {
     ) {
         match self.source_roots.entry(source_root_id) {
             Entry::Occupied(mut occupied) => {
-                occupied.get_mut().set_source_root(db).with_durability(durability).to(source_root);
+                if occupied.get().source_root(db) != source_root {
+                    occupied
+                        .get_mut()
+                        .set_source_root(db)
+                        .with_durability(durability)
+                        .to(source_root);
+                }
             }
             Entry::Vacant(vacant) => {
                 let source_root =
@@ -189,11 +199,13 @@ impl Files {
     ) {
         match self.file_source_roots.entry(id) {
             Entry::Occupied(mut occupied) => {
-                occupied
-                    .get_mut()
-                    .set_source_root_id(db)
-                    .with_durability(durability)
-                    .to(source_root_id);
+                if occupied.get().source_root_id(db) != source_root_id {
+                    occupied
+                        .get_mut()
+                        .set_source_root_id(db)
+                        .with_durability(durability)
+                        .to(source_root_id);
+                }
             }
             Entry::Vacant(vacant) => {
                 let file_source_root =
@@ -206,7 +218,7 @@ impl Files {
 
 /// The set of roots for crates.io libraries.
 /// Files in libraries are assumed to never change.
-#[salsa::input(singleton, debug)]
+#[salsa::input(singleton, debug, persist)]
 pub struct LibraryRoots {
     #[returns(ref)]
     pub roots: FxHashSet<SourceRootId>,
@@ -214,25 +226,57 @@ pub struct LibraryRoots {
 
 /// The set of "local" (that is, from the current workspace) roots.
 /// Files in local roots are assumed to change frequently.
-#[salsa::input(singleton, debug)]
+#[salsa::input(singleton, debug, persist)]
 pub struct LocalRoots {
     #[returns(ref)]
     pub roots: FxHashSet<SourceRootId>,
 }
 
-#[salsa_macros::input(debug)]
+#[salsa_macros::input(debug, persist(serialize = serialize_file_text, deserialize = deserialize_file_text))]
 pub struct FileText {
     #[returns(ref)]
     pub text: Arc<str>,
     pub file_id: vfs::FileId,
 }
 
-#[salsa_macros::input(debug)]
+fn serialize_file_text<S: serde::Serializer>(
+    fields: &(Arc<str>, FileId),
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serde::Serialize::serialize(&(&*fields.0, fields.1), serializer)
+}
+
+fn deserialize_file_text<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<(Arc<str>, FileId), D::Error> {
+    // Allocate the database-owned Arc directly from the deserializer's string
+    // view, avoiding an intermediate String for every source file.
+    struct Text(Arc<str>);
+    impl<'de> serde::Deserialize<'de> for Text {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            struct Visitor;
+            impl serde::de::Visitor<'_> for Visitor {
+                type Value = Text;
+                fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.write_str("source text")
+                }
+                fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Text, E> {
+                    Ok(Text(Arc::from(value)))
+                }
+            }
+            deserializer.deserialize_str(Visitor)
+        }
+    }
+    let (text, file_id) = <(Text, FileId) as serde::Deserialize>::deserialize(deserializer)?;
+    Ok((text.0, file_id))
+}
+
+#[salsa_macros::input(debug, persist)]
 pub struct FileSourceRootInput {
     pub source_root_id: SourceRootId,
 }
 
-#[salsa_macros::input(debug)]
+#[salsa_macros::input(debug, persist)]
 pub struct SourceRootInput {
     pub source_root: Arc<SourceRoot>,
 }
@@ -306,7 +350,7 @@ impl Nonce {
 }
 
 /// Crate related data shared by the whole workspace.
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CrateWorkspaceData {
     pub target: Result<target::TargetData, target::TargetLoadError>,
     /// Toolchain version used to compile the crate.
@@ -330,7 +374,7 @@ pub fn toolchain_channel(db: &dyn salsa::Database, krate: Crate) -> Option<Relea
     krate.workspace_data(db).toolchain.as_ref().and_then(|v| ReleaseChannel::from_str(&v.pre))
 }
 
-#[salsa::input(singleton, debug)]
+#[salsa::input(singleton, debug, persist)]
 struct AllCrates {
     crates: std::sync::Arc<[Crate]>,
 }

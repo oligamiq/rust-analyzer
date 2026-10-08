@@ -133,6 +133,19 @@ const _: () = assert!(align_of::<Symbol>() == align_of::<NonNull<()>>());
 type Map = DashMap<Symbol, (), BuildHasherDefault<FxHasher>>;
 static MAP: OnceLock<Map> = OnceLock::new();
 
+impl serde::Serialize for Symbol {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Symbol {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Ok(Self::intern(&text))
+    }
+}
+
 impl Symbol {
     pub fn intern(s: &str) -> Self {
         let storage = MAP.get_or_init(symbols::prefill);

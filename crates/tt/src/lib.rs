@@ -41,7 +41,7 @@ pub struct Lit {
     pub suffix: Option<Symbol>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum IdentIsRaw {
     No,
     Yes,
@@ -68,7 +68,7 @@ impl IdentIsRaw {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, serde::Serialize, serde::Deserialize)]
 pub enum LitKind {
     Byte,
     Char,
@@ -83,7 +83,7 @@ pub enum LitKind {
     Err(()),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum TokenTree {
     Leaf(Leaf),
     Subtree(Subtree),
@@ -98,7 +98,7 @@ impl TokenTree {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Leaf {
     Literal(Literal),
     Punct(Punct),
@@ -116,7 +116,7 @@ impl Leaf {
 }
 impl_from!(Literal, Punct, Ident for Leaf);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Subtree {
     pub delimiter: Delimiter,
     /// Number of following token trees that belong to this subtree, excluding this subtree.
@@ -413,7 +413,7 @@ impl DelimSpan {
         DelimSpan { open, close }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Delimiter {
     pub open: Span,
     pub close: Span,
@@ -434,7 +434,7 @@ impl Delimiter {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DelimiterKind {
     Parenthesis,
     Brace,
@@ -442,7 +442,7 @@ pub enum DelimiterKind {
     Invisible,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Literal {
     /// Escaped, text then suffix concatenated.
     pub text_and_suffix: Symbol,
@@ -544,7 +544,7 @@ pub fn token_to_literal(text: &str, span: Span) -> Literal {
     Literal::new(lit, span, kind, suffix)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Punct {
     pub char: char,
     pub spacing: Spacing,
@@ -555,7 +555,7 @@ pub struct Punct {
 /// compound token. Used for conversions to `proc_macro::Spacing`. Also used to
 /// guide pretty-printing, which is where the `JointHidden` value (which isn't
 /// part of `proc_macro::Spacing`) comes in useful.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Spacing {
     /// The token cannot join with the following token to form a compound
     /// token.
@@ -612,7 +612,7 @@ pub enum Spacing {
 }
 
 /// Identifier or keyword.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Ident {
     pub sym: Symbol,
     pub span: Span,

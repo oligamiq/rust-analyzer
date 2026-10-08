@@ -31,7 +31,7 @@ pub struct PerNsGlobImports {
     macros: FxHashSet<(ModuleId, Name)>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ImportOrExternCrate {
     Glob(GlobId),
     Import(ImportId),
@@ -79,7 +79,7 @@ impl ImportOrExternCrate {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ImportOrGlob {
     Glob(GlobId),
     Import(ImportId),
@@ -94,7 +94,7 @@ impl ImportOrGlob {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ImportOrDef {
     Import(ImportId),
     Glob(GlobId),
@@ -121,16 +121,40 @@ impl From<ImportOrGlob> for ImportOrDef {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub struct ImportId {
     pub use_: UseId,
+    #[serde(with = "serde_idx")]
     pub idx: Idx<ast::UseTree>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub struct GlobId {
     pub use_: UseId,
+    #[serde(with = "serde_idx")]
     pub idx: Idx<ast::UseTree>,
+}
+
+pub(crate) mod serde_idx {
+    use la_arena::{Idx, RawIdx};
+
+    pub(crate) fn serialize<T, S: serde::Serializer>(
+        id: &Idx<T>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u32(id.into_raw().into_u32())
+    }
+
+    pub(crate) fn deserialize<'de, T, D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Idx<T>, D::Error> {
+        let id = <u32 as serde::Deserialize>::deserialize(deserializer)?;
+        Ok(Idx::from_raw(RawIdx::from_u32(id)))
+    }
 }
 
 impl PerNsGlobImports {
@@ -145,7 +169,7 @@ impl PerNsGlobImports {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ItemScope {
     /// Defs visible in this scope. This includes `declarations`, but also
     /// imports. The imports belong to this module and can be resolved by using them on
@@ -195,7 +219,7 @@ pub struct ItemScope {
     derive_macros: FxHashMap<AstId<ast::Adt>, SmallVec<[DeriveMacroInvocation; 1]>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct DeriveMacroInvocation {
     attr_id: AttrId,
     /// The `#[derive]` call

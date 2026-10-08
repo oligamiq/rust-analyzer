@@ -13,6 +13,7 @@ rust-version.workspace = true
 doctest = false
 
 [dependencies]
+serde.workspace = true
 arrayvec.workspace = true
 bitflags.workspace = true
 cov-mark = "2.0.0"
@@ -54,6 +55,7 @@ test-utils.workspace = true
 test-fixture.workspace = true
 
 [features]
+cache-item-trees = []
 in-rust-tree = ["hir-expand/in-rust-tree"]
 
 [lints]

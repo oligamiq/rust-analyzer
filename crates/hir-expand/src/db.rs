@@ -48,7 +48,7 @@ pub enum TokenExpander<'db> {
     ProcMacro(CustomProcMacroExpander),
 }
 
-#[query_group::query_group]
+#[query_group::query_group(persist)]
 pub trait ExpandDatabase: SourceDatabase {
     /// The proc macros. Do not use this! Use `proc_macros_for_crate()` instead.
     #[salsa::input]

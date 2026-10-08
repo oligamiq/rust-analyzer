@@ -43,6 +43,20 @@ pub struct Interned<T: Internable> {
     arc: Arc<T>,
 }
 
+impl<T: Internable + serde::Serialize> serde::Serialize for Interned<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (**self).serialize(serializer)
+    }
+}
+
+impl<'de, T: Internable + serde::Deserialize<'de>> serde::Deserialize<'de> for Interned<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // Rebuild values, never process-local addresses. Like new(), this
+        // constructor is restricted to non-GC interned types.
+        Ok(Self::new(T::deserialize(deserializer)?))
+    }
+}
+
 impl<T: Internable> Interned<T> {
     #[inline]
     pub fn new(obj: T) -> Self {

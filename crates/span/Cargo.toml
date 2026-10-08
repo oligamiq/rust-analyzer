@@ -11,6 +11,7 @@ authors.workspace = true
 
 
 [dependencies]
+serde.workspace = true
 la-arena.workspace = true
 salsa = { workspace = true, optional = true }
 rustc-hash.workspace = true

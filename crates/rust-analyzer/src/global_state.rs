@@ -92,6 +92,8 @@ pub(crate) struct GlobalState {
     pub(crate) config: Arc<Config>,
     pub(crate) config_errors: Option<ConfigErrors>,
     pub(crate) analysis_host: AnalysisHost,
+    pub(crate) semantic_cache: Option<crate::semantic_cache::PreparedCache>,
+    pub(crate) cache_audit: Option<crate::semantic_cache::CacheAudit>,
     pub(crate) diagnostics: DiagnosticCollection,
     pub(crate) mem_docs: MemDocs,
     pub(crate) source_root_config: SourceRootConfig,
@@ -249,6 +251,26 @@ impl GlobalState {
         };
 
         let mut analysis_host = AnalysisHost::new(config.lru_parse_query_capacity());
+        let mut initial_vfs = vfs::Vfs::default();
+        let mut cache_status = String::from("[stdlib-cache] disabled: no cache path configured");
+        let semantic_cache = std::env::var_os("RA_STD_CACHE")
+            .map(std::path::PathBuf::from)
+            .or_else(|| cfg!(target_os = "wasi").then(|| std::path::PathBuf::from("/.cache/rust-analyzer/std.salsa")))
+            .and_then(|path| {
+                let loaded = crate::semantic_cache::load(&path).and_then(|cache| {
+                    crate::semantic_cache::seed_vfs(&cache, &mut initial_vfs)?;
+                    Ok(cache)
+                });
+                match loaded {
+                    Ok(cache) => { cache_status = cache.status.clone(); Some(cache) },
+                    Err(error) => {
+                        cache_status = format!("[stdlib-cache] rejected: {error:#}");
+                        tracing::info!(%error, "standard-library cache unavailable; using cold analysis");
+                        initial_vfs = vfs::Vfs::default();
+                        None
+                    }
+                }
+            });
         if let Some(capacities) = config.lru_query_capacities_config() {
             analysis_host.update_lru_capacities(capacities);
         }
@@ -268,6 +290,8 @@ impl GlobalState {
             loader,
             config: Arc::new(config.clone()),
             analysis_host,
+            semantic_cache,
+            cache_audit: None,
             diagnostics: Default::default(),
             mem_docs: MemDocs::default(),
             semantic_tokens_cache: Arc::new(Default::default()),
@@ -303,7 +327,7 @@ impl GlobalState {
 
             fetch_ws_receiver: None,
 
-            vfs: Arc::new(RwLock::new((vfs::Vfs::default(), Default::default()))),
+            vfs: Arc::new(RwLock::new((initial_vfs, Default::default()))),
             vfs_config_version: 0,
             vfs_progress_config_version: 0,
             vfs_span: None,
@@ -327,7 +351,14 @@ impl GlobalState {
         };
         // Apply any required database inputs from the config.
         this.update_configuration(config);
+        this.report_std_cache(cache_status);
         this
+    }
+
+    pub(crate) fn report_std_cache(&self, message: String) {
+        self.send_notification::<crate::semantic_cache::CacheStatusNotification>(
+            lsp_types::LogMessageParams { typ: lsp_types::MessageType::INFO, message },
+        );
     }
 
     pub(crate) fn process_changes(&mut self) -> bool {

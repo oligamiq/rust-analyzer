@@ -9,18 +9,49 @@ use syntax::ast;
 
 use crate::{AstId, nameres::ModuleId};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DefDiagnosticKind {
-    UnresolvedModule { ast: AstId<ast::Module>, candidates: Box<[String]> },
-    UnresolvedExternCrate { ast: AstId<ast::ExternCrate> },
-    UnresolvedImport { id: AstId<ast::Use>, index: Idx<ast::UseTree> },
-    UnconfiguredCode { ast_id: ErasedAstId, cfg: CfgExpr, opts: CfgOptions },
-    UnresolvedMacroCall { ast: MacroCallKind, path: ModPath },
-    UnimplementedBuiltinMacro { ast: AstId<ast::Macro> },
-    InvalidDeriveTarget { ast: AstId<ast::Item>, id: AttrId },
-    MalformedDerive { ast: AstId<ast::Adt>, id: AttrId },
-    MacroDefError { ast: AstId<ast::Macro>, message: String },
-    MacroError { ast: AstId<ast::Item>, path: ModPath, err: ExpandErrorKind },
+    UnresolvedModule {
+        ast: AstId<ast::Module>,
+        candidates: Box<[String]>,
+    },
+    UnresolvedExternCrate {
+        ast: AstId<ast::ExternCrate>,
+    },
+    UnresolvedImport {
+        id: AstId<ast::Use>,
+        #[serde(with = "crate::item_scope::serde_idx")]
+        index: Idx<ast::UseTree>,
+    },
+    UnconfiguredCode {
+        ast_id: ErasedAstId,
+        cfg: CfgExpr,
+        opts: CfgOptions,
+    },
+    UnresolvedMacroCall {
+        ast: MacroCallKind,
+        path: ModPath,
+    },
+    UnimplementedBuiltinMacro {
+        ast: AstId<ast::Macro>,
+    },
+    InvalidDeriveTarget {
+        ast: AstId<ast::Item>,
+        id: AttrId,
+    },
+    MalformedDerive {
+        ast: AstId<ast::Adt>,
+        id: AttrId,
+    },
+    MacroDefError {
+        ast: AstId<ast::Macro>,
+        message: String,
+    },
+    MacroError {
+        ast: AstId<ast::Item>,
+        path: ModPath,
+        err: ExpandErrorKind,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,7 +72,7 @@ impl DefDiagnostics {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DefDiagnostic {
     pub in_module: ModuleId,
     pub kind: DefDiagnosticKind,

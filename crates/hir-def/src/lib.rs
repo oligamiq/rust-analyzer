@@ -113,7 +113,8 @@ pub struct FindPathConfig {
     pub allow_unstable: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(bound = "")]
 pub struct ItemLoc<N: AstIdNode> {
     pub container: ModuleId,
     pub id: AstId<N>,
@@ -149,7 +150,8 @@ impl<N: AstIdNode> HasModule for ItemLoc<N> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(bound = "")]
 pub struct AssocItemLoc<N: AstIdNode> {
     // FIXME: Store this as an erased `salsa::Id` to save space
     pub container: ItemContainerId,
@@ -337,7 +339,7 @@ impl ImplId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct BuiltinDeriveImplLoc {
     pub adt: AdtId,
     pub trait_: BuiltinDeriveImplTrait,
@@ -345,7 +347,7 @@ pub struct BuiltinDeriveImplLoc {
     pub derive_index: u32,
 }
 
-#[salsa::interned(debug, no_lifetime)]
+#[salsa::interned(debug, no_lifetime, persist)]
 #[derive(PartialOrd, Ord)]
 pub struct BuiltinDeriveImplId {
     #[returns(ref)]
@@ -367,7 +369,7 @@ impl ExternBlockId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct EnumVariantLoc {
     pub id: AstId<ast::Variant>,
     pub parent: EnumId,
@@ -405,7 +407,7 @@ impl EnumVariantId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Macro2Loc {
     pub container: ModuleId,
     pub id: AstId<ast::MacroDef>,
@@ -416,7 +418,7 @@ pub struct Macro2Loc {
 impl_intern!(Macro2Id, Macro2Loc);
 impl_loc!(Macro2Loc, id: MacroDef, container: ModuleId);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MacroRulesLoc {
     pub container: ModuleId,
     pub id: AstId<ast::MacroRules>,
@@ -429,13 +431,14 @@ impl_loc!(MacroRulesLoc, id: MacroRules, container: ModuleId);
 
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(serde::Serialize, serde::Deserialize)]
     pub struct MacroRulesLocFlags: u8 {
         const ALLOW_INTERNAL_UNSAFE = 1 << 0;
         const LOCAL_INNER = 1 << 1;
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MacroExpander {
     Declarative { styles: MacroCallStyles },
     BuiltIn(BuiltinFnLikeExpander),
@@ -445,7 +448,7 @@ pub enum MacroExpander {
     UnimplementedBuiltIn,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ProcMacroLoc {
     pub container: ModuleId,
     pub id: AstId<ast::Fn>,
@@ -456,7 +459,7 @@ pub struct ProcMacroLoc {
 impl_intern!(ProcMacroId, ProcMacroLoc);
 impl_loc!(ProcMacroLoc, id: Fn, container: ModuleId);
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BlockLoc {
     pub ast_id: AstId<ast::BlockExpr>,
     /// The containing module.
@@ -464,7 +467,7 @@ pub struct BlockLoc {
 }
 impl_intern!(BlockId, BlockLoc);
 
-#[salsa_macros::tracked(debug)]
+#[salsa_macros::tracked(debug, persist)]
 #[derive(PartialOrd, Ord)]
 pub struct ModuleIdLt<'db> {
     /// The crate this module belongs to.
@@ -642,7 +645,17 @@ pub struct LifetimeParamId {
     pub local_id: LocalLifetimeParamId,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa_macros::Supertype)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    salsa_macros::Supertype,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum ItemContainerId {
     ExternBlockId(ExternBlockId),
     ModuleId(ModuleId),
@@ -652,7 +665,19 @@ pub enum ItemContainerId {
 impl_from!(ModuleId for ItemContainerId);
 
 /// A Data Type
-#[derive(Debug, PartialOrd, Ord, Clone, Copy, PartialEq, Eq, Hash, salsa_macros::Supertype)]
+#[derive(
+    Debug,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    salsa_macros::Supertype,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum AdtId {
     StructId(StructId),
     UnionId(UnionId),
@@ -661,7 +686,19 @@ pub enum AdtId {
 impl_from!(StructId, UnionId, EnumId for AdtId);
 
 /// A macro
-#[derive(Debug, PartialOrd, Ord, Clone, Copy, PartialEq, Eq, Hash, salsa_macros::Supertype)]
+#[derive(
+    Debug,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    salsa_macros::Supertype,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum MacroId {
     Macro2Id(Macro2Id),
     MacroRulesId(MacroRulesId),
@@ -685,7 +722,7 @@ pub enum GenericParamId {
 impl_from!(TypeParamId, LifetimeParamId, ConstParamId for GenericParamId);
 
 /// The defs which can be visible in the module.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ModuleDefId {
     ModuleId(ModuleId),
     FunctionId(FunctionId),

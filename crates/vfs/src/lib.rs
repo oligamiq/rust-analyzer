@@ -62,7 +62,9 @@ use tracing::{Level, span};
 /// Handle to a file in [`Vfs`]
 ///
 /// Most functions in rust-analyzer use this when they need to refer to a file.
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(
+    Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct FileId(u32);
 // pub struct FileId(NonMaxU32);
 
@@ -205,6 +207,15 @@ impl Vfs {
                 let path = self.interner.lookup(file_id);
                 (file_id, path)
             })
+    }
+
+    /// All allocated paths in ID order, including missing files. Persistent
+    /// analysis snapshots must reserve these slots to keep later IDs stable.
+    pub fn iter_all_paths(&self) -> impl Iterator<Item = (FileId, &VfsPath)> + '_ {
+        (0..self.data.len()).map(|index| {
+            let id = FileId(index as u32);
+            (id, self.interner.lookup(id))
+        })
     }
 
     /// Update the `path` with the given `contents`. `None` means the file was deleted.

@@ -214,14 +214,14 @@ pub fn collect_item_tree_attrs<'a, BreakValue>(
     )
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Attr {
     pub path: Interned<ModPath>,
     pub input: Option<Box<AttrInput>>,
     pub ctxt: SyntaxContext,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum AttrInput {
     /// `#[attr = "string"]`
     Literal(tt::Literal),
@@ -346,7 +346,7 @@ fn unescape(s: &str) -> Option<Cow<'_, str>> {
 ///
 /// Outer attributes are counted first, then inner attributes. This does not support
 /// out-of-line modules, which may have attributes spread across 2 files!
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct AttrId {
     id: u32,
 }

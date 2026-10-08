@@ -14,7 +14,7 @@ use crate::{
     visibility::{self, Visibility},
 };
 
-#[query_group::query_group]
+#[query_group::query_group(persist)]
 pub trait DefDatabase: ExpandDatabase + SourceDatabase {
     /// Whether to expand procedural macros during name resolution.
     #[salsa::input]

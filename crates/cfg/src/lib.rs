@@ -29,7 +29,7 @@ pub use dnf::DnfExpr;
 /// of key and value in `key_values`.
 ///
 /// See: <https://doc.rust-lang.org/reference/conditional-compilation.html#set-configuration-options>
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CfgOptions {
     enabled: FxHashSet<CfgAtom>,
 }
@@ -281,7 +281,7 @@ impl fmt::Display for InactiveReason {
 }
 
 /// A `CfgOptions` that implements `Hash`, for the sake of hashing only.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct HashableCfgOptions {
     _enabled: Box<[CfgAtom]>,
 }

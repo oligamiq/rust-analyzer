@@ -24,7 +24,7 @@ use tt::token_to_literal;
 
 use crate::{db::DefDatabase, item_tree::lower::Ctx};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum AttrsOrCfg {
     Enabled {
         attrs: AttrsOwned,
@@ -153,7 +153,7 @@ impl AttrsOrCfg {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct AttrsOwned(Box<[Attr]>);
 
 #[derive(Debug, Clone, Copy)]

@@ -83,3 +83,10 @@ cfg_if! {
 }
 
 pub use self::imp::{thread_yield, ThreadParker};
+
+// Exercise the WASM fallback on native CI as well; the host's default parker
+// otherwise hides regressions in this target-specific implementation.
+#[cfg(all(test, not(target_family = "wasm")))]
+#[path = "wasm.rs"]
+#[allow(dead_code)]
+mod wasm_fallback_tests;

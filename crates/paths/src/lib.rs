@@ -12,6 +12,8 @@ pub use camino::{Utf8Component, Utf8Components, Utf8Path, Utf8PathBuf, Utf8Prefi
 
 /// A [`Utf8PathBuf`] that is guaranteed to be absolute.
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, Hash)]
+#[cfg_attr(feature = "serde1", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde1", serde(try_from = "Utf8PathBuf", into = "Utf8PathBuf"))]
 pub struct AbsPathBuf(Utf8PathBuf);
 
 impl From<AbsPathBuf> for Utf8PathBuf {

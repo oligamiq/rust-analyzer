@@ -379,6 +379,38 @@ pub struct TopSubtree {
     span_parts: Box<[CompressedSpanPart]>,
 }
 
+impl serde::Serialize for TopSubtree {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.as_token_trees().iter_flat_tokens())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for TopSubtree {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let tokens = <Vec<crate::TokenTree> as serde::Deserialize>::deserialize(deserializer)?;
+        let Some(crate::TokenTree::Subtree(root)) = tokens.first() else {
+            return Err(serde::de::Error::custom("missing token tree root"));
+        };
+        if root.len as usize != tokens.len() - 1 {
+            return Err(serde::de::Error::custom("invalid token tree root length"));
+        }
+        let mut ends = vec![tokens.len()];
+        for (index, token) in tokens.iter().enumerate().skip(1) {
+            while ends.last() == Some(&index) {
+                ends.pop();
+            }
+            if let crate::TokenTree::Subtree(subtree) = token {
+                let end = index.checked_add(1).and_then(|i| i.checked_add(subtree.len as usize));
+                match (end, ends.last()) {
+                    (Some(end), Some(&parent_end)) if end <= parent_end => ends.push(end),
+                    _ => return Err(serde::de::Error::custom("invalid token subtree length")),
+                }
+            }
+        }
+        Ok(Self::from_serialized(tokens))
+    }
+}
+
 impl TopSubtree {
     pub fn empty(span: DelimSpan) -> Self {
         Self {

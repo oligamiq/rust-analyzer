@@ -283,6 +283,10 @@ impl ProjectFolders {
             }
         }
 
+        let sysroots: Vec<_> =
+            workspaces.iter().filter_map(|ws| ws.sysroot.rust_lib_src_root()).collect();
+        order_source_roots(&mut roots, &sysroots);
+
         // Collect workspace roots not already covered by a local PackageRoot
         // (e.g. virtual workspaces where no package lives at the workspace root).
         // We need these to load workspace-root rust-analyzer.toml into a local source root.
@@ -383,6 +387,56 @@ impl ProjectFolders {
         res.source_root_config = SourceRootConfig { fsc, local_filesets };
 
         res
+    }
+}
+
+fn order_source_roots(roots: &mut [PackageRoot], sysroots: &[&AbsPath]) {
+    // FileChange derives SourceRootId from this order. Keep sysroot roots at
+    // the front in both cache generation and workspace loading: /src (and
+    // dependency roots) sorting before /sysroot must not invalidate all memos.
+    let is_sysroot = |root: &PackageRoot| {
+        !root.is_local
+            && root
+                .include
+                .iter()
+                .any(|path| sysroots.iter().any(|sysroot| path.starts_with(sysroot)))
+    };
+    roots.sort_by(|a, b| {
+        (!is_sysroot(a)).cmp(&(!is_sysroot(b))).then_with(|| a.include.cmp(&b.include))
+    });
+}
+
+#[cfg(test)]
+mod cache_root_tests {
+    use super::*;
+
+    #[test]
+    fn sysroot_ids_survive_adding_earlier_workspace_and_dependency_paths() {
+        let sysroot = AbsPathBuf::assert_utf8("/sysroot/lib/rustlib/src/rust/library".into());
+        let library =
+            PackageRoot { is_local: false, include: vec![sysroot.clone()], exclude: vec![] };
+        let mut before = vec![library.clone()];
+        order_source_roots(&mut before, &[&sysroot]);
+        let original_id = before.iter().position(|r| r.include == library.include).unwrap();
+        let mut after = vec![
+            library.clone(),
+            PackageRoot {
+                is_local: true,
+                include: vec![AbsPathBuf::assert_utf8("/src".into())],
+                exclude: vec![],
+            },
+            PackageRoot {
+                is_local: false,
+                include: vec![AbsPathBuf::assert_utf8("/cargo/registry".into())],
+                exclude: vec![],
+            },
+        ];
+        order_source_roots(&mut after, &[&sysroot]);
+        let restored_id = after.iter().position(|r| r.include == library.include).unwrap();
+        assert_eq!(
+            original_id, restored_id,
+            "workspace loading must preserve cached SourceRootIds"
+        );
     }
 }
 

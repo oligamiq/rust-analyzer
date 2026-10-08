@@ -81,6 +81,13 @@ pub use span::{self, FileId};
 pub type FilePosition = FilePositionWrapper<FileId>;
 pub type FileRange = FileRangeWrapper<FileId>;
 
+#[cfg(test)]
+mod semantic_cache_tests;
+
+mod semantic_cache;
+#[cfg(feature = "cache-codec-bench")]
+pub use semantic_cache::CacheCodecStats;
+
 #[salsa_macros::db]
 pub struct RootDatabase {
     // FIXME: Revisit this commit now that we migrated to the new salsa, given we store arcs in this

@@ -49,6 +49,7 @@ test-fixture.workspace = true
 syntax-bridge.workspace = true
 
 [features]
+cache-item-trees = ["hir-def/cache-item-trees"]
 in-rust-tree = ["hir-expand/in-rust-tree"]
 
 [lints]

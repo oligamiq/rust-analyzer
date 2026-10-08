@@ -4,6 +4,7 @@ use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum Edition {
     // The syntax context stuff needs the discriminants to start from 0 and be consecutive.
     Edition2015 = 0,

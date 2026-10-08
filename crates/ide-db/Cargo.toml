@@ -13,6 +13,10 @@ rust-version.workspace = true
 doctest = false
 
 [dependencies]
+serde.workspace = true
+serde_bytes = "0.11.19"
+pot = { version = "3.0.1", optional = true }
+rmp-serde = "1.3.0"
 cov-mark = "2.0.0"
 crossbeam-channel.workspace = true
 tracing = { workspace = true, features = ["attributes"] }
@@ -50,8 +54,11 @@ line-index.workspace = true
 
 [dev-dependencies]
 expect-test = "1.5.1"
+serde_json.workspace = true
 
 [features]
+cache-item-trees = ["hir/cache-item-trees"]
+cache-codec-bench = ["dep:pot"]
 default = []
 in-rust-tree = []
 

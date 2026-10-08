@@ -12,7 +12,9 @@ use triomphe::Arc;
 
 use crate::{ExpandError, ExpandErrorKind, ExpandResult, db::ExpandDatabase, tt};
 
-#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Debug, Hash)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Debug, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum ProcMacroKind {
     CustomDerive,
     Bang,
@@ -107,8 +109,52 @@ impl FromIterator<(CrateBuilderId, ProcMacroLoadResult)> for ProcMacrosBuilder {
 #[derive(Debug, PartialEq, Eq)]
 pub struct CrateProcMacros(StoredProcMacroLoadResult);
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Eq)]
 pub struct ProcMacros(FxHashMap<Crate, Arc<CrateProcMacros>>);
+
+impl serde::Serialize for ProcMacros {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if !self.0.is_empty() {
+            return Err(serde::ser::Error::custom("ProcMacros must be empty for serialization"));
+        }
+        use serde::ser::SerializeMap;
+        let map = serializer.serialize_map(Some(0))?;
+        map.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ProcMacros {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{Error, Visitor};
+        struct EmptyMapVisitor;
+
+        impl<'de> Visitor<'de> for EmptyMapVisitor {
+            type Value = ProcMacros;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("an empty map for ProcMacros")
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                if map.next_key::<serde::de::IgnoredAny>()?.is_some() {
+                    return Err(M::Error::custom("ProcMacros must be empty upon deserialization"));
+                }
+                Ok(ProcMacros::default())
+            }
+        }
+        deserializer.deserialize_map(EmptyMapVisitor)
+    }
+}
+
 impl ProcMacros {
     fn get(&self, krate: Crate) -> Option<Arc<CrateProcMacros>> {
         self.0.get(&krate).cloned()
@@ -194,7 +240,7 @@ impl PartialEq for ProcMacro {
 }
 
 /// A custom proc-macro expander handle. This handle together with its crate resolves to a [`ProcMacro`]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct CustomProcMacroExpander {
     proc_macro_id: u32,
 }
@@ -353,4 +399,19 @@ pub(crate) fn proc_macros_for_crate(
     krate: Crate,
 ) -> Option<Arc<CrateProcMacros>> {
     db.proc_macros().get(krate)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_procmacros_serialization() {
+        let empty_macros = ProcMacros::default();
+        let serialized = serde_json::to_string(&empty_macros).unwrap();
+        assert_eq!(serialized, "{}");
+
+        let deserialized: ProcMacros = serde_json::from_str(&serialized).unwrap();
+        assert!(deserialized.0.is_empty());
+    }
 }

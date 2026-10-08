@@ -107,13 +107,13 @@ lsp-server = { version = "0.7.9" }
 # non-local crates
 anyhow = "1.0.98"
 arrayvec = "0.7.6"
-bitflags = "2.9.1"
+bitflags = { version = "2.9.1", features = ["serde"] }
 cargo_metadata = "0.23.0"
 camino = "1.2.2"
 crossbeam-channel = "0.5.15"
 dissimilar = "1.0.10"
 dot = "0.1.4"
-either = "1.15.0"
+either = { version = "1.15.0", features = ["serde"] }
 expect-test = "1.5.1"
 indexmap = { version = "2.9.0", features = ["serde"] }
 itertools = "0.14.0"
@@ -142,22 +142,24 @@ salsa = { version = "0.26.2", default-features = false, features = [
     "salsa_unstable",
     "macros",
     "inventory",
+    "persistence",
 ] }
 salsa-macros = "0.26.2"
-semver = "1.0.26"
-serde = { version = "1.0.219" }
+semver = { version = "1.0.26", features = ["serde"] }
+serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_derive = { version = "1.0.219" }
 serde_json = "1.0.140"
 rustc-hash = "2.1.1"
 rustc-literal-escaper = "0.0.4"
 smallvec = { version = "1.15.1", features = [
+    "serde",
     "const_new",
     "union",
     "const_generics",
 ] }
 smol_str = "0.3.2"
 temp-dir = "0.1.16"
-text-size = "1.1.1"
+text-size = { version = "1.1.1", features = ["serde"] }
 toml = "0.9.8"
 tracing = { version = "0.1.41", default-features = false, features = ["std"] }
 tracing-tree = "0.4.0"
@@ -169,7 +171,7 @@ tracing-subscriber = { version = "0.3.20", default-features = false, features = 
     "time",
     "tracing-log",
 ] }
-triomphe = { version = "0.1.14", default-features = false, features = ["std"] }
+triomphe = { version = "0.1.14", default-features = false, features = ["std", "serde"] }
 url = "2.5.4"
 xshell = "0.2.7"
 thin-vec = "0.2.16"

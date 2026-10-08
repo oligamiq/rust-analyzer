@@ -68,7 +68,7 @@ impl fmt::Display for ParseError {
 pub struct ExpandError {
     pub inner: Arc<(Span, ExpandErrorKind)>,
 }
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ExpandErrorKind {
     BindingError(Box<Box<str>>),
     UnresolvedBinding(Box<Box<str>>),

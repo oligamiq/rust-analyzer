@@ -12,6 +12,7 @@ mod prime_caches;
 mod run_tests;
 mod rustc_tests;
 mod scip;
+mod semantic_cache;
 mod ssr;
 mod symbols;
 mod unresolved_references;

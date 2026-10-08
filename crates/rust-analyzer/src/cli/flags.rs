@@ -47,6 +47,16 @@ xflags::xflags! {
         /// Parse stdin and print the list of symbols.
         cmd symbols {}
 
+        /// Generate a build-specific standard-library Salsa cache.
+        cmd generate-std-cache {
+            /// rust-project.json containing a sysroot and no user crates.
+            required project: PathBuf
+            /// Output cache file.
+            required output: PathBuf
+            /// Benchmark codecs against the same warmed database (requires cache-codec-bench).
+            optional --benchmark-codecs
+        }
+
         /// Highlight stdin as html.
         cmd highlight {
             /// Enable rainbow highlighting of identifiers.
@@ -213,6 +223,7 @@ pub struct RustAnalyzer {
 
 #[derive(Debug)]
 pub enum RustAnalyzerCmd {
+    GenerateStdCache(GenerateStdCache),
     LspServer(LspServer),
     Parse(Parse),
     Symbols(Symbols),
@@ -243,6 +254,13 @@ pub struct Parse {
 
 #[derive(Debug)]
 pub struct Symbols;
+
+#[derive(Debug)]
+pub struct GenerateStdCache {
+    pub project: PathBuf,
+    pub output: PathBuf,
+    pub benchmark_codecs: bool,
+}
 
 #[derive(Debug)]
 pub struct Highlight {
